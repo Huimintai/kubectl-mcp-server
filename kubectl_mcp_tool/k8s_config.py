@@ -325,6 +325,11 @@ def _load_config_for_context(context: str = "") -> Any:
     Uses the provider module for caching when available, unless stateless
     mode is enabled.
 
+    If a bearer token is available in the current request context (set by
+    BearerTokenMiddleware), a new ApiClient is created with the token override
+    so that K8s API calls authenticate as the end user. The cached base client
+    is NOT mutated.
+
     Args:
         context: Context name (empty for default)
 
@@ -334,6 +339,35 @@ def _load_config_for_context(context: str = "") -> Any:
     Raises:
         UnknownContextError: If context is not found (when provider available)
         RuntimeError: If config cannot be loaded
+    """
+    from .bearer_token import get_bearer_token
+
+    api_client = _load_base_config_for_context(context)
+
+    # If a bearer token is present, create a new ApiClient with token override
+    bearer_token = get_bearer_token()
+    if bearer_token:
+        from kubernetes import client
+        # Copy the base configuration and override the auth token
+        base_config = api_client.configuration
+        token_config = client.Configuration()
+        # Copy essential fields from the base config
+        token_config.host = base_config.host
+        token_config.ssl_ca_cert = base_config.ssl_ca_cert
+        token_config.verify_ssl = base_config.verify_ssl
+        # Override authentication with the bearer token
+        token_config.api_key = {"authorization": f"Bearer {bearer_token}"}
+        logger.info("Bearer token override applied for context '%s' (token length=%d)", context or "default", len(bearer_token))
+        return client.ApiClient(configuration=token_config)
+
+    return api_client
+
+
+def _load_base_config_for_context(context: str = "") -> Any:
+    """Load base kubernetes config for a context (without bearer token override).
+
+    This is the original _load_config_for_context logic, extracted so that
+    bearer token override can be applied on top.
     """
     if not _stateless_mode and _HAS_PROVIDER:
         try:
@@ -380,7 +414,6 @@ def _load_config_for_context(context: str = "") -> Any:
         )
 
     return client.ApiClient(configuration=api_config)
-
 
 def _get_client(context: str, client_class):
     """Helper to create a configured Kubernetes API client."""
