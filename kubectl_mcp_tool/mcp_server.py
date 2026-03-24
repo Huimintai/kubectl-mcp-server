@@ -529,6 +529,10 @@ class MCPServer:
                 ]
             )
 
+            # Add bearer token middleware for per-user K8s authentication
+            from kubectl_mcp_tool.middleware import BearerTokenMiddleware
+            app.add_middleware(BearerTokenMiddleware)
+
             logger.info(f"SSE endpoints: GET /sse (events), POST /messages/ (messages)")
             logger.info(f"Observability endpoints: GET /health, /stats, /metrics, /safety")
 
@@ -689,6 +693,10 @@ class MCPServer:
                 Route("/safety", safety_mode_endpoint, methods=["GET"]),
             ]
         )
+
+        # Add bearer token middleware for per-user K8s authentication
+        from kubectl_mcp_tool.middleware import BearerTokenMiddleware
+        app.add_middleware(BearerTokenMiddleware)
 
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
