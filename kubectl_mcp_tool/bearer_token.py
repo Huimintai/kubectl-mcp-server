@@ -26,10 +26,37 @@ _bearer_token_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVa
 def get_bearer_token() -> Optional[str]:
     """Get the bearer token for the current request context.
 
+    First checks the contextvar set by BearerTokenMiddleware (works in SSE/custom
+    HTTP modes where ASGI middleware and tool handlers share the same context).
+
+    Falls back to extracting the Authorization header from the MCP request context
+    (required for streamable-http mode where FastMCP runs tool handlers in a
+    different async context than the ASGI middleware).
+
     Returns:
         The bearer token string (without 'Bearer ' prefix), or None if not set.
     """
-    return _bearer_token_var.get()
+    # Fast path: contextvar set by BearerTokenMiddleware (same async context)
+    token = _bearer_token_var.get()
+    if token:
+        return token
+
+    # Fallback: extract from MCP request context (streamable-http mode)
+    try:
+        from fastmcp.server.dependencies import get_http_request
+        request = get_http_request()
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:]
+            logger.info(
+                "Bearer token extracted from MCP request context (length=%d)",
+                len(token),
+            )
+            return token
+    except Exception:
+        pass
+
+    return None
 
 
 def set_bearer_token(token: Optional[str]) -> contextvars.Token:

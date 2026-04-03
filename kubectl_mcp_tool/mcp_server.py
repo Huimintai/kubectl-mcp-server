@@ -559,23 +559,42 @@ class MCPServer:
         """
         logger.info(f"Starting MCP server with HTTP transport on {host}:{port}")
 
+        from kubectl_mcp_tool.middleware import BearerTokenMiddleware
+        from starlette.middleware import Middleware
+
+        bearer_middleware = [Middleware(BearerTokenMiddleware)]
+
         try:
-            # Check if FastMCP supports streamable HTTP
+            # FastMCP 2.x supports middleware parameter in run_http_async
             if hasattr(self.server, 'run_http_async'):
-                await self.server.run_http_async(host=host, port=port)
+                try:
+                    await self.server.run_http_async(host=host, port=port, middleware=bearer_middleware)
+                except TypeError:
+                    # Older FastMCP without middleware param — fall back to custom impl
+                    logger.warning("run_http_async does not support middleware param, using custom HTTP server")
+                    await self._serve_http_custom(host=host, port=port)
             elif hasattr(self.server, 'run_streamable_http_async'):
-                await self.server.run_streamable_http_async(host=host, port=port)
+                try:
+                    await self.server.run_streamable_http_async(host=host, port=port, middleware=bearer_middleware)
+                except TypeError:
+                    await self._serve_http_custom(host=host, port=port)
             else:
                 # Fall back to implementing HTTP transport manually using ASGI
                 logger.info("FastMCP does not have built-in HTTP support, using custom implementation")
                 await self._serve_http_custom(host=host, port=port)
         except TypeError as e:
             logger.warning(f"HTTP transport parameter issue: {e}. Trying alternative signatures...")
-            # Try without parameters
+            # Try without host/port but keep middleware
             if hasattr(self.server, 'run_http_async'):
-                await self.server.run_http_async()
+                try:
+                    await self.server.run_http_async(middleware=bearer_middleware)
+                except TypeError:
+                    await self._serve_http_custom(host=host, port=port)
             elif hasattr(self.server, 'run_streamable_http_async'):
-                await self.server.run_streamable_http_async()
+                try:
+                    await self.server.run_streamable_http_async(middleware=bearer_middleware)
+                except TypeError:
+                    await self._serve_http_custom(host=host, port=port)
             else:
                 await self._serve_http_custom(host=host, port=port)
 
