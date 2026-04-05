@@ -110,7 +110,9 @@ def register_operations_tools(server: "FastMCP", non_destructive: bool):
             allowed_auth_subcommands = ["can-i"]
             allowed_config_subcommands = [
                 "config view", "config current-context", "config get-contexts",
-                "config get-clusters", "config use-context"
+                "config get-clusters",
+                # "config use-context" intentionally excluded — use switch_context tool instead
+                # (kubeconfig volume is read-only in container deployments)
             ]
             cmd_parts = shlex.split(command)
             if not cmd_parts:
