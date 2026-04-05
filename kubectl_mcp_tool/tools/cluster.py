@@ -19,10 +19,12 @@ from kubectl_mcp_tool.k8s_config import (
     get_admissionregistration_client,
     list_contexts,
     get_active_context,
+    context_exists,
     enable_kubeconfig_watch,
     disable_kubeconfig_watch,
     is_stateless_mode,
     set_stateless_mode,
+    set_active_context_override,
     _get_kubectl_context_args,
 )
 
@@ -182,18 +184,16 @@ def register_cluster_tools(server: "FastMCP", non_destructive: bool):
         Args:
             context_name: Name of the context to switch to
 
-        Note: This changes the default context in kubeconfig. For multi-cluster
-        operations without changing default, use the 'context' parameter on
-        individual tools instead.
+        Note: In container environments with a read-only kubeconfig volume this
+        updates an in-memory override instead of writing to the kubeconfig file.
+        The override is used by all subsequent tool calls in the same session.
         """
         try:
-            result = subprocess.run(
-                ["kubectl", "config", "use-context", context_name],
-                capture_output=True, text=True, timeout=10
-            )
-            if result.returncode == 0:
-                return {"success": True, "message": f"Switched to context: {context_name}"}
-            return {"success": False, "error": result.stderr}
+            if not context_exists(context_name):
+                return {"success": False, "error": f"Context '{context_name}' not found in kubeconfig"}
+            set_active_context_override(context_name)
+            logger.info("Switched active context to '%s' (in-memory override)", context_name)
+            return {"success": True, "message": f"Switched to context: {context_name}"}
         except Exception as e:
             logger.error(f"Error switching context: {e}")
             return {"success": False, "error": str(e)}

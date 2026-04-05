@@ -551,8 +551,31 @@ def list_contexts() -> list:
         return []
 
 
+# In-memory context override — used when the kubeconfig volume is read-only.
+# set_active_context_override() / get_active_context_override() manage this state.
+_active_context_override: Optional[str] = None
+
+
+def set_active_context_override(context: Optional[str]) -> None:
+    """Set the in-memory active context (does not touch the kubeconfig file)."""
+    global _active_context_override
+    _active_context_override = context
+
+
+def get_active_context_override() -> Optional[str]:
+    """Return the in-memory active context override, or None if not set."""
+    return _active_context_override
+
+
 def get_active_context() -> Optional[str]:
-    """Get the current active context name."""
+    """Get the current active context name.
+
+    Returns the in-memory override if one has been set via switch_context,
+    otherwise falls back to reading the kubeconfig file.
+    """
+    if _active_context_override:
+        return _active_context_override
+
     if _HAS_PROVIDER:
         try:
             return provider_get_current_context()
@@ -578,10 +601,25 @@ def context_exists(context: str) -> bool:
 
 
 def _get_kubectl_context_args(context: str = "") -> list:
-    """Get kubectl command arguments for specifying a context."""
-    if context and context.strip():
-        return ["--context", context.strip()]
-    return []
+    """Get kubectl command arguments for specifying a context.
+
+    If a bearer token is available in the current request context (set by
+    BearerTokenMiddleware), it is injected via --token so that subprocess-based
+    kubectl calls honour the same OIDC credential as SDK-based calls.
+
+    If no context is explicitly passed, falls back to the in-memory context
+    override (set by switch_context) so that context switches are respected
+    even on a read-only kubeconfig volume.
+    """
+    from .bearer_token import get_bearer_token
+    effective_context = context.strip() if context and context.strip() else (_active_context_override or "")
+    args = []
+    if effective_context:
+        args += ["--context", effective_context]
+    bearer_token = get_bearer_token()
+    if bearer_token:
+        args += ["--token", bearer_token]
+    return args
 
 
 _BASE_EXPORTS = [
@@ -591,6 +629,7 @@ _BASE_EXPORTS = [
     "get_apiextensions_client", "get_coordination_client", "get_events_client",
     "load_kubernetes_config", "patch_kubernetes_config",
     "list_contexts", "get_active_context", "context_exists",
+    "set_active_context_override", "get_active_context_override",
     "enable_kubeconfig_watch", "disable_kubeconfig_watch", "on_config_change", "KubeconfigWatcher",
     "is_stateless_mode", "set_stateless_mode",
 ]
