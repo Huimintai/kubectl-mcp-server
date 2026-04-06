@@ -551,30 +551,44 @@ def list_contexts() -> list:
         return []
 
 
-# In-memory context override — used when the kubeconfig volume is read-only.
-# set_active_context_override() / get_active_context_override() manage this state.
-_active_context_override: Optional[str] = None
+# Per-session context override — keyed by FastMCP session_id.
+# Replaces the previous single global variable to eliminate race conditions
+# when multiple users/agents share the same kubectl-mcp-server process.
+_active_context_override: Dict[str, str] = {}
 
 
-def set_active_context_override(context: Optional[str]) -> None:
-    """Set the in-memory active context (does not touch the kubeconfig file)."""
-    global _active_context_override
-    _active_context_override = context
+def set_active_context_override(session_id: str, context: Optional[str]) -> None:
+    """Set the in-memory active context for a specific session.
+
+    Args:
+        session_id: FastMCP session ID (ctx.session_id from tool Context)
+        context: Context name to set, or None to clear the override
+    """
+    if context:
+        _active_context_override[session_id] = context
+    else:
+        _active_context_override.pop(session_id, None)
 
 
-def get_active_context_override() -> Optional[str]:
-    """Return the in-memory active context override, or None if not set."""
-    return _active_context_override
+def get_active_context_override(session_id: str = "") -> Optional[str]:
+    """Return the in-memory context override for a session, or None if not set."""
+    if session_id:
+        return _active_context_override.get(session_id)
+    return None
 
 
-def get_active_context() -> Optional[str]:
+def get_active_context(session_id: str = "") -> Optional[str]:
     """Get the current active context name.
 
-    Returns the in-memory override if one has been set via switch_context,
-    otherwise falls back to reading the kubeconfig file.
+    Returns the per-session in-memory override if one has been set via
+    switch_context for this session_id, otherwise falls back to reading
+    the kubeconfig file's current-context.
+
+    Args:
+        session_id: FastMCP session ID to look up per-session override
     """
-    if _active_context_override:
-        return _active_context_override
+    if session_id and session_id in _active_context_override:
+        return _active_context_override[session_id]
 
     if _HAS_PROVIDER:
         try:
@@ -600,19 +614,26 @@ def context_exists(context: str) -> bool:
     return any(ctx["name"] == context for ctx in contexts)
 
 
-def _get_kubectl_context_args(context: str = "") -> list:
+def _get_kubectl_context_args(context: str = "", session_id: str = "") -> list:
     """Get kubectl command arguments for specifying a context.
 
     If a bearer token is available in the current request context (set by
     BearerTokenMiddleware), it is injected via --token so that subprocess-based
     kubectl calls honour the same OIDC credential as SDK-based calls.
 
-    If no context is explicitly passed, falls back to the in-memory context
-    override (set by switch_context) so that context switches are respected
-    even on a read-only kubeconfig volume.
+    If no context is explicitly passed, falls back to the per-session in-memory
+    context override (set by switch_context) so that context switches are
+    respected even on a read-only kubeconfig volume.
+
+    Args:
+        context: Explicit context name. If empty, the per-session override is used.
+        session_id: FastMCP session ID used to look up the per-session context override.
     """
     from .bearer_token import get_bearer_token
-    effective_context = context.strip() if context and context.strip() else (_active_context_override or "")
+    if context and context.strip():
+        effective_context = context.strip()
+    else:
+        effective_context = _active_context_override.get(session_id, "") if session_id else ""
     args = []
     if effective_context:
         args += ["--context", effective_context]

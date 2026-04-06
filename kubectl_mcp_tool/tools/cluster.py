@@ -11,6 +11,7 @@ import re
 import subprocess
 from typing import Any, Dict, List, Optional
 
+from fastmcp import Context
 from mcp.types import ToolAnnotations
 
 from kubectl_mcp_tool.k8s_config import (
@@ -65,14 +66,14 @@ def register_cluster_tools(server: "FastMCP", non_destructive: bool):
             readOnlyHint=True,
         ),
     )
-    def list_contexts_tool() -> Dict[str, Any]:
+    def list_contexts_tool(ctx: Context) -> Dict[str, Any]:
         """List all available kubectl contexts with detailed info.
 
         Returns all contexts from kubeconfig with cluster, user, namespace info.
         """
         try:
             contexts = list_contexts()
-            active = get_active_context()
+            active = get_active_context(ctx.session_id)
 
             return {
                 "success": True,
@@ -90,10 +91,10 @@ def register_cluster_tools(server: "FastMCP", non_destructive: bool):
             readOnlyHint=True,
         ),
     )
-    def get_current_context() -> Dict[str, Any]:
+    def get_current_context(ctx: Context) -> Dict[str, Any]:
         """Get the current kubectl context."""
         try:
-            active = get_active_context()
+            active = get_active_context(ctx.session_id)
             if active:
                 return {"success": True, "context": active}
             return {"success": False, "error": "No active context found"}
@@ -178,7 +179,7 @@ def register_cluster_tools(server: "FastMCP", non_destructive: bool):
             destructiveHint=True,
         ),
     )
-    def switch_context(context_name: str) -> Dict[str, Any]:
+    def switch_context(context_name: str, ctx: Context) -> Dict[str, Any]:
         """Switch to a different kubectl context (changes default context).
 
         Args:
@@ -186,13 +187,14 @@ def register_cluster_tools(server: "FastMCP", non_destructive: bool):
 
         Note: In container environments with a read-only kubeconfig volume this
         updates an in-memory override instead of writing to the kubeconfig file.
-        The override is used by all subsequent tool calls in the same session.
+        The override is scoped to the current session (identified by ctx.session_id)
+        so concurrent users/agents do not interfere with each other.
         """
         try:
             if not context_exists(context_name):
                 return {"success": False, "error": f"Context '{context_name}' not found in kubeconfig"}
-            set_active_context_override(context_name)
-            logger.info("Switched active context to '%s' (in-memory override)", context_name)
+            set_active_context_override(ctx.session_id, context_name)
+            logger.info("Switched active context to '%s' for session '%s' (in-memory override)", context_name, ctx.session_id)
             return {"success": True, "message": f"Switched to context: {context_name}"}
         except Exception as e:
             logger.error(f"Error switching context: {e}")

@@ -6,6 +6,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from mcp.types import ToolAnnotations
+from fastmcp import Context
 
 from kubectl_mcp_tool.k8s_config import _get_kubectl_context_args
 
@@ -94,12 +95,12 @@ def register_operations_tools(server: "FastMCP", non_destructive: bool):
             readOnlyHint=True,
         ),
     )
-    def kubectl_generic(command: str, context: str = "") -> Dict[str, Any]:
+    def kubectl_generic(command: str, ctx: Context, context: str = "") -> Dict[str, Any]:
         """Execute any kubectl command. Use with caution.
 
         Args:
             command: kubectl command to execute (without kubectl prefix)
-            context: Kubernetes context to use (optional, uses current context if not specified)
+            context: Kubernetes context to use (optional, uses current session context if not specified)
         """
         try:
             # Security: validate command starts with allowed operations
@@ -149,7 +150,7 @@ def register_operations_tools(server: "FastMCP", non_destructive: bool):
                     "error": f"Command not allowed. Allowed: {', '.join(allowed_prefixes + ['config', 'auth can-i'])}"
                 }
 
-            full_cmd = ["kubectl"] + _get_kubectl_context_args(context) + cmd_parts
+            full_cmd = ["kubectl"] + _get_kubectl_context_args(context, ctx.session_id) + cmd_parts
             result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=60)
 
             return {
