@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubectl-mcp-server
+  namespace: dbci-agent
+  labels:
+    app: kubectl-mcp-server
+spec:
+  type: ClusterIP
+  selector:
+    app: kubectl-mcp-server
+  ports:
+  - name: mcp
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800   # 3 hours — covers typical agent session length
