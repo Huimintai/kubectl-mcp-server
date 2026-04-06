@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubectl-mcp-server
+  namespace: dbci-agent
+  labels:
+    app: kubectl-mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubectl-mcp-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: kubectl-mcp-server
+    spec:
+      serviceAccountName: kubectl-mcp-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+      containers:
+      - name: kubectl-mcp-server
+        image: huimin123/kubectl-mcp-server:bearer-token-v6
+        args:
+        - --transport
+        - streamable-http
+        - --port
+        - "8000"
+        env:
+        - name: KUBECONFIG
+          value: /etc/kubeconfig/config
+        - name: MCP_K8S_PROVIDER
+          value: kubeconfig
+        ports:
+        - name: mcp
+          containerPort: 8000
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: /etc/kubeconfig
+          readOnly: true
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: canary-kubectl-mcp-kubeconfig
