@@ -1,7 +1,6 @@
 .git
 docs
 tests
-*.md
 .github
 __pycache__
 *.pyc
