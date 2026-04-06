@@ -37,9 +37,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy the rest of the codebase
 COPY . .
 
-# Install the package and ensure files are readable by non-root users
+# Install the package and ensure Python source files are readable by non-root users
 RUN pip install --no-cache-dir -e . && \
-    chmod -R a+rX /app
+    find /app -type f -name "*.py" -exec chmod a+r {} \; && \
+    find /app -type d -exec chmod a+rX {} \;
 
 # Expose server port (for SSE/HTTP modes)
 EXPOSE 8000
