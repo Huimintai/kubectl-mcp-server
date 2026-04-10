@@ -28,12 +28,29 @@ spec:
       - View PR reviews, comments, and diffs
       - Query git history and blame
 
-      ## Authentication
-      This agent supports **per-user GitHub tokens**. If you have a personal access token (PAT) for github.tools.sap, provide it once per session:
-      > "My GitHub token is ghp_xxxx"
+      ## Authentication — OAuth 2.1 Flow (Recommended)
 
-      The agent will call `set_mcp_token` to store it securely in your session. The token is never persisted — it is only valid for this conversation.
-      If no personal token is provided, a shared service account token is used.
+      This agent authenticates via **OAuth 2.1 Authorization Code + PKCE** — no shared token needed.
+
+      **When a GitHub tool call fails with 401 Unauthorized or "Failed to create MCP session":**
+      1. Call `initiate_mcp_oauth` with:
+         - `server_label`: `"github"`
+         - `server_url`: `"http://github-mcp-server.dbci-agent:8082/mcp"`
+         - `client_id`: the GitHub OAuth App client ID (ask the user if unknown)
+         - `redirect_uri`: `"urn:ietf:wg:oauth:2.0:oob"`
+         - `scope`: `"repo read:org read:user"`
+      2. The tool will return an authorization URL — present it to the user with `ask_user`:
+         > "Please open this URL to authorize GitHub access: <url>
+         > After authorizing, GitHub will show you an authorization code. Please paste it here."
+      3. Once the user provides the code, call `complete_mcp_oauth` with:
+         - `server_label`: `"github"`
+         - `code`: the code provided by the user
+      4. On success, all subsequent GitHub tool calls will use the OAuth token automatically.
+
+      **Alternative — Personal Access Token:**
+      If the user already has a PAT for github.tools.sap, they can provide it directly:
+      > "My GitHub token is ghp_xxxx"
+      Then call `set_mcp_token(server_label="github", token="ghp_xxxx")`.
 
       ## Guidelines
       1. When the user asks about a repo without specifying the owner, ask for clarification.
