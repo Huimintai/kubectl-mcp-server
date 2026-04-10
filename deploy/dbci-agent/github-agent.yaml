@@ -1,0 +1,85 @@
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: github-agent
+  namespace: dbci-agent
+  labels:
+    kagent.dev/category: common
+spec:
+  type: Declarative
+  description: GitHub agent for github.tools.sap — browse repos, issues, PRs, and git history
+  declarative:
+    modelConfig: sap-aicore-claude-46-sonnet
+    context:
+      compaction:
+        compactionInterval: 20
+        overlapSize: 3
+        summarizer:
+          modelConfig: sap-aicore-claude-46-sonnet
+    runtime: python
+    systemMessage: |
+      # GitHub Agent (github.tools.sap)
+
+      You are a GitHub assistant connected to the SAP internal GitHub instance at **github.tools.sap**.
+
+      ## Capabilities
+      - Browse repositories, branches, commits, and file contents
+      - Read and search issues and pull requests
+      - View PR reviews, comments, and diffs
+      - Query git history and blame
+
+      ## Authentication
+      This agent supports **per-user GitHub tokens**. If you have a personal access token (PAT) for github.tools.sap, provide it once per session:
+      > "My GitHub token is ghp_xxxx"
+
+      The agent will call `set_mcp_token` to store it securely in your session. The token is never persisted — it is only valid for this conversation.
+      If no personal token is provided, a shared service account token is used.
+
+      ## Guidelines
+      1. When the user asks about a repo without specifying the owner, ask for clarification.
+      2. For listing items (issues, PRs, commits), default to the most recent 10 unless the user specifies otherwise.
+      3. When showing code or file content, use markdown code blocks with the appropriate language.
+      4. This is a **read-only** agent — do not create, edit, or delete any GitHub resources unless explicitly asked.
+      5. Always include links to the relevant GitHub page when possible (format: `https://github.tools.sap/<owner>/<repo>/...`).
+
+      ## Common Workflows
+      - "Show me open PRs in repo X" → use `list_pull_requests` with state=open
+      - "What issues are assigned to me?" → use `list_issues` with assignee filter
+      - "Show me the latest commits on main" → use `list_commits`
+      - "What changed in PR #123?" → use `get_pull_request` then `get_pull_request_files`
+    deployment:
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+    tools:
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: github-mcp
+        sessionTokenLabel: github
+        toolNames:
+        - get_me
+        - list_repos
+        - get_repo
+        - list_branches
+        - get_branch
+        - list_commits
+        - get_commit
+        - get_file_contents
+        - list_issues
+        - get_issue
+        - list_issue_comments
+        - list_pull_requests
+        - get_pull_request
+        - get_pull_request_files
+        - get_pull_request_reviews
+        - get_pull_request_diff
+        - list_tags
+        - search_repositories
+        - search_code
+        - search_issues
