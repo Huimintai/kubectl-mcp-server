@@ -1,0 +1,10 @@
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: ado-mcp
+  namespace: dbci-agent
+spec:
+  description: Azure DevOps MCP server (pipelines, repositories, work items)
+  url: http://ado-mcp-server.dbci-agent:8000/mcp
+  protocol: STREAMABLE_HTTP
+  timeout: 60s

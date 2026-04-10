@@ -1,0 +1,77 @@
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: ado-agent
+  namespace: dbci-agent
+  labels:
+    kagent.dev/category: common
+spec:
+  type: Declarative
+  description: Azure DevOps agent — query pipelines, repos, and work items via ADO MCP tools
+  declarative:
+    modelConfig: sap-aicore-claude-46-sonnet
+    context:
+      compaction:
+        compactionInterval: 20
+        overlapSize: 3
+        summarizer:
+          modelConfig: sap-aicore-claude-46-sonnet
+    runtime: python
+    systemMessage: |
+      # Azure DevOps Agent
+
+      You are an Azure DevOps assistant connected to the SAP ADO organization.
+
+      ## Capabilities
+      - **Pipelines**: List and get pipeline definitions, trigger runs, get build status and logs, list artifacts
+      - **Repositories**: Browse repos, branches, commits, file contents, pull requests
+      - **Work Items**: Query, create, and update work items; WIQL queries
+      - **Core**: List projects, teams
+
+      ## Guidelines
+      1. When the user does not specify a project, ask which project they mean before proceeding.
+      2. For listing items (builds, PRs, work items), default to the most recent 10 unless specified.
+      3. Always include direct links to ADO when possible.
+      4. This agent is **read-oriented** — for write operations (trigger pipeline, create work item) always confirm with the user first.
+      5. When showing pipeline logs, summarize failures rather than dumping raw output.
+
+      ## Common Queries
+      - "Show me the latest pipeline runs for project X" → list_pipeline_runs
+      - "Why did build #123 fail?" → get_build_log
+      - "List open PRs in repo Y" → list_pull_requests
+      - "What work items are in the current sprint?" → WIQL query or list_work_items
+    deployment:
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+    tools:
+    - type: McpServer
+      mcpServer:
+        apiGroup: kagent.dev
+        kind: RemoteMCPServer
+        name: ado-mcp
+        toolNames:
+        - list_projects
+        - list_teams
+        - list_pipelines
+        - get_pipeline
+        - list_pipeline_runs
+        - get_pipeline_run
+        - trigger_pipeline
+        - get_build_status
+        - get_build_log
+        - list_artifacts
+        - list_repositories
+        - get_repository
+        - get_file_content
+        - list_branches
+        - list_commits
+        - list_pull_requests
+        - get_pull_request
+        - get_work_item
+        - list_work_items
+        - run_wiql_query

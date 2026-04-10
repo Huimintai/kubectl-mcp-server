@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ado-mcp-server
+  namespace: dbci-agent
+  labels:
+    app: ado-mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ado-mcp-server
+  template:
+    metadata:
+      labels:
+        app: ado-mcp-server
+    spec:
+      containers:
+      - name: ado-mcp-server
+        image: huimin123/ado-mcp-server:v1
+        env:
+        - name: ADO_MCP_ORG
+          valueFrom:
+            secretKeyRef:
+              name: ado-mcp-secret
+              key: ADO_MCP_ORG
+        - name: ADO_MCP_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ado-mcp-secret
+              key: ADO_MCP_AUTH_TOKEN
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        ports:
+        - containerPort: 8000
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # npm cache needs write access
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ado-mcp-server
+  namespace: dbci-agent
+  labels:
+    app: ado-mcp-server
+spec:
+  type: ClusterIP
+  selector:
+    app: ado-mcp-server
+  ports:
+  - name: mcp
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
